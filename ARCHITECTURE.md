@@ -146,34 +146,51 @@ Cada pantalla tiene su ViewModel asociado, inyectado por Hilt:
 
 ### 4. Capa de datos
 
-#### Entidades Room (estado actual)
+#### Entidades Room
 
 ```kotlin
-@Entity(tableName = "vault_items")
+@Entity(
+    tableName = "vault_items",
+    foreignKeys = [ForeignKey(
+        entity = Category::class,
+        parentColumns = ["id"],
+        childColumns = ["categoryId"],
+        onDelete = ForeignKey.SET_NULL
+    )],
+    indices = [Index("categoryId")]
+)
 data class VaultItem(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
     val content: String,
     val type: ItemType,
+    val imagePath: String? = null,
+    val tags: String = "",
     val categoryId: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
 
-enum class ItemType { NOTE, PASSWORD, FILE }
+enum class ItemType { NOTE, IMAGE, LINK, CLIPBOARD }
 ```
 
 ```kotlin
 @Entity(tableName = "categories")
 data class Category(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val name: String
+    val name: String,
+    val color: Int? = null,
+    val sortOrder: Int = 0
 )
 ```
 
-> Nota: en fases posteriores se añadirán campos como `imagePath`, `tags`, `color` y `sortOrder`.
+Notas de diseño:
+- `imagePath` almacena solo el nombre del fichero (no ruta completa). `FileStorage` resuelve la ruta absoluta.
+- `tags` es un String con valores separados por coma. Se busca con `LIKE`. Suficiente para v1; migrar a tabla relacional si escala.
+- La foreign key con `ON DELETE SET NULL` permite borrar categorías sin perder items: el `categoryId` pasa a `null`.
+- El índice en `categoryId` optimiza las queries de filtro por categoría.
 
-#### DAOs (estado actual)
+#### DAOs
 
 ```kotlin
 @Dao
@@ -184,6 +201,17 @@ interface VaultItemDao {
     @Query("SELECT * FROM vault_items WHERE id = :id")
     suspend fun getById(id: Long): VaultItem?
 
+    @Query("SELECT * FROM vault_items WHERE categoryId = :categoryId ORDER BY updatedAt DESC")
+    fun getByCategory(categoryId: Long): Flow<List<VaultItem>>
+
+    @Query("SELECT * FROM vault_items WHERE title LIKE '%' || :query || '%' " +
+           "OR content LIKE '%' || :query || '%' " +
+           "OR tags LIKE '%' || :query || '%' ORDER BY updatedAt DESC")
+    fun search(query: String): Flow<List<VaultItem>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: VaultItem): Long
+
     @Insert
     suspend fun insert(item: VaultItem): Long
 
@@ -192,24 +220,31 @@ interface VaultItemDao {
 
     @Delete
     suspend fun delete(item: VaultItem)
+
+    @Query("DELETE FROM vault_items WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }
 ```
 
 ```kotlin
 @Dao
 interface CategoryDao {
-    @Query("SELECT * FROM categories ORDER BY name ASC")
+    @Query("SELECT * FROM categories ORDER BY sortOrder ASC, name ASC")
     fun getAll(): Flow<List<Category>>
+
+    @Query("SELECT * FROM categories WHERE id = :id")
+    suspend fun getById(id: Long): Category?
 
     @Insert
     suspend fun insert(category: Category): Long
+
+    @Update
+    suspend fun update(category: Category)
 
     @Delete
     suspend fun delete(category: Category)
 }
 ```
-
-> Nota: en la Fase 1 se añadirán queries de búsqueda, filtro por categoría y upsert.
 
 #### Base de datos
 
@@ -225,28 +260,63 @@ abstract class VaultDatabase : RoomDatabase() {
 }
 ```
 
-#### Repositorio (estado actual)
+#### Repositorio
 
-`ItemRepository` actúa como fuente única de verdad. Expone `Flow` para observación reactiva desde los ViewModels.
+`ItemRepository` actúa como fuente única de verdad. Coordina operaciones entre Room (metadatos) y `FileStorage` (imágenes). Expone `Flow` para observación reactiva desde los ViewModels.
 
 ```kotlin
 @Singleton
 class ItemRepository @Inject constructor(
-    private val vaultItemDao: VaultItemDao
+    private val vaultItemDao: VaultItemDao,
+    private val fileStorage: FileStorage
 ) {
     fun getAll(): Flow<List<VaultItem>> = vaultItemDao.getAll()
     suspend fun getById(id: Long): VaultItem? = vaultItemDao.getById(id)
-    suspend fun insert(item: VaultItem): Long = vaultItemDao.insert(item)
-    suspend fun update(item: VaultItem) = vaultItemDao.update(item)
-    suspend fun delete(item: VaultItem) = vaultItemDao.delete(item)
+    fun getByCategory(categoryId: Long): Flow<List<VaultItem>> = vaultItemDao.getByCategory(categoryId)
+    fun search(query: String): Flow<List<VaultItem>> = vaultItemDao.search(query)
+
+    suspend fun save(item: VaultItem, imageBytes: ByteArray? = null): Long {
+        val finalItem = if (imageBytes != null) {
+            val fileName = "img_${System.currentTimeMillis()}.png"
+            fileStorage.saveImage(fileName, imageBytes)
+            item.copy(imagePath = fileName)
+        } else item
+        return vaultItemDao.upsert(finalItem)
+    }
+
+    suspend fun delete(item: VaultItem) {
+        item.imagePath?.let { fileStorage.deleteImage(it) }
+        vaultItemDao.delete(item)
+    }
+
+    suspend fun deleteById(id: Long) {
+        val item = vaultItemDao.getById(id)
+        if (item != null) delete(item)
+    }
 }
 ```
 
-> Nota: en la Fase 1 se integrará `FileStorage` para coordinar DAO + almacenamiento de imágenes.
+Notas de diseño:
+- `save()` usa `upsert` internamente: si el item tiene `id = 0` se inserta como nuevo, si tiene un ID existente se reemplaza.
+- Al guardar con `imageBytes`, el repositorio genera un nombre de fichero único con timestamp y delega a `FileStorage`.
+- `delete()` y `deleteById()` eliminan tanto el registro en Room como el fichero de imagen asociado (si existe).
 
 #### Almacenamiento de imágenes (`FileStorage`)
 
-Las imágenes se guardan en el directorio interno de la app (`context.filesDir/images/`). Esto evita necesitar permisos de almacenamiento externo y garantiza que los archivos se eliminan si se desinstala la app. Actualmente es un placeholder; se implementará en la Fase 1.
+```kotlin
+@Singleton
+class FileStorage @Inject constructor(
+    @param:ApplicationContext private val context: Context
+) {
+    fun saveImage(fileName: String, bytes: ByteArray): String
+    fun readImage(fileName: String): ByteArray?
+    fun deleteImage(fileName: String): Boolean
+    fun getImageFile(fileName: String): File
+    fun imageExists(fileName: String): Boolean
+}
+```
+
+Las imágenes se guardan en `context.filesDir/images/`. Esto evita necesitar permisos de almacenamiento externo y garantiza que los archivos se eliminan si se desinstala la app.
 
 ### 5. Inyección de dependencias (Hilt)
 

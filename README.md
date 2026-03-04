@@ -50,16 +50,16 @@ app/src/main/java/com/aaronfortuno/studio/qnotes/
 ├── data/
 │   ├── local/
 │   │   ├── VaultDatabase.kt      # @Database (VaultItem, Category)
-│   │   ├── VaultItemDao.kt       # @Dao — CRUD para VaultItem
-│   │   └── CategoryDao.kt        # @Dao — CRUD para Category
+│   │   ├── VaultItemDao.kt       # @Dao — CRUD, búsqueda, filtro
+│   │   └── CategoryDao.kt        # @Dao — CRUD categorías
 │   ├── model/
 │   │   ├── VaultItem.kt          # @Entity — item principal
 │   │   ├── Category.kt           # @Entity — categoría
-│   │   └── ItemType.kt           # enum: NOTE, PASSWORD, FILE
+│   │   └── ItemType.kt           # enum: NOTE, IMAGE, LINK, CLIPBOARD
 │   ├── repository/
-│   │   └── ItemRepository.kt     # Repositorio con inyección Hilt
+│   │   └── ItemRepository.kt     # Repositorio (DAO + FileStorage)
 │   └── storage/
-│       └── FileStorage.kt        # Almacenamiento de ficheros
+│       └── FileStorage.kt        # Almacenamiento de imágenes (filesDir/images/)
 ├── di/
 │   └── DatabaseModule.kt         # @Module Hilt — DB, DAOs
 ├── service/                       # QuickSettingsTileService (Fase 2)
@@ -78,10 +78,11 @@ app/src/main/java/com/aaronfortuno/studio/qnotes/
 └── util/                          # Extensiones, helpers (Fase 6+)
 ```
 
-## Compilar
+## Compilar y testear
 
 ```bash
 ./gradlew assembleDebug
+./gradlew connectedDebugAndroidTest   # requiere dispositivo/emulador
 ```
 
 ## Licencia
@@ -90,4 +91,4 @@ MIT
 
 ## Estado
 
-En desarrollo — Fase 0 (scaffolding) completada.
+En desarrollo — Fase 1 (modelo de datos y almacenamiento) completada. 27 tests instrumentados pasando.

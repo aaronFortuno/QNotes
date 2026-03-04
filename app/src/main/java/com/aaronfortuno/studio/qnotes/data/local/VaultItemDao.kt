@@ -3,6 +3,7 @@ package com.aaronfortuno.studio.qnotes.data.local
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.aaronfortuno.studio.qnotes.data.model.VaultItem
@@ -17,6 +18,20 @@ interface VaultItemDao {
     @Query("SELECT * FROM vault_items WHERE id = :id")
     suspend fun getById(id: Long): VaultItem?
 
+    @Query("SELECT * FROM vault_items WHERE categoryId = :categoryId ORDER BY updatedAt DESC")
+    fun getByCategory(categoryId: Long): Flow<List<VaultItem>>
+
+    @Query(
+        "SELECT * FROM vault_items WHERE title LIKE '%' || :query || '%' " +
+        "OR content LIKE '%' || :query || '%' " +
+        "OR tags LIKE '%' || :query || '%' " +
+        "ORDER BY updatedAt DESC"
+    )
+    fun search(query: String): Flow<List<VaultItem>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: VaultItem): Long
+
     @Insert
     suspend fun insert(item: VaultItem): Long
 
@@ -25,4 +40,7 @@ interface VaultItemDao {
 
     @Delete
     suspend fun delete(item: VaultItem)
+
+    @Query("DELETE FROM vault_items WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }

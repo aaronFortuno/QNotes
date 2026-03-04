@@ -4,7 +4,10 @@
       "Bash(./gradlew assembleDebug:*)",
       "WebSearch",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:mvnrepository.com)"
+      "WebFetch(domain:mvnrepository.com)",
+      "Bash(adb devices:*)",
+      "Bash(./gradlew connectedAndroidTest:*)",
+      "Bash(./gradlew connectedDebugAndroidTest:*)"
     ]
   }
 }

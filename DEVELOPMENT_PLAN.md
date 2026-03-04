@@ -5,7 +5,7 @@
 | Fase | Alcance | Estado |
 |---|---|---|
 | 0 | Scaffolding del proyecto | Completada |
-| 1 | Modelo de datos y almacenamiento | Pendiente |
+| 1 | Modelo de datos y almacenamiento | Completada |
 | 2 | **Captura rápida + Quick Settings Tile** | Pendiente |
 | 3 | Pantalla principal (Home) | Pendiente |
 | 4 | Detalle y edición | Pendiente |
@@ -39,18 +39,28 @@
 
 ---
 
-## Fase 1 — Modelo de datos y almacenamiento
+## Fase 1 — Modelo de datos y almacenamiento (COMPLETADA)
 
 **Objetivo**: capa de datos funcional y testeada.
 
-**Tareas**:
-- Completar entidades Room: añadir campos faltantes a `VaultItem` (`imagePath`, `tags`), a `Category` (`color`, `sortOrder`).
-- Completar `VaultItemDao` y `CategoryDao` con queries de búsqueda, filtro por categoría y upsert.
-- Implementar `FileStorage` para guardar/leer/eliminar imágenes en almacenamiento interno.
-- Completar `ItemRepository` para coordinar DAO + FileStorage.
-- Escribir tests instrumentados para el DAO (Room soporta testing con base de datos en memoria).
+**Resultado**:
+- Entidades Room completadas:
+  - `VaultItem`: añadidos `imagePath` (nullable), `tags` (String, separados por coma). Foreign key a `Category` con `ON DELETE SET NULL` e índice en `categoryId`.
+  - `Category`: añadidos `color` (nullable Int ARGB), `sortOrder` (Int, default 0).
+  - `ItemType`: cambiado a `NOTE`, `IMAGE`, `LINK`, `CLIPBOARD` (alineado con los flujos de captura previstos).
+- DAOs completados:
+  - `VaultItemDao`: añadidos `getByCategory()`, `search()` (busca en title, content y tags con `LIKE`), `upsert()` (con `OnConflictStrategy.REPLACE`), `deleteById()`.
+  - `CategoryDao`: añadidos `getById()`, `update()`. Ordenación por `sortOrder ASC, name ASC`.
+- `FileStorage` implementado: `saveImage()`, `readImage()`, `deleteImage()`, `getImageFile()`, `imageExists()`. Directorio: `context.filesDir/images/`.
+- `ItemRepository` completado: integra `VaultItemDao` + `FileStorage`. `save()` gestiona imagen automáticamente (genera filename con timestamp, guarda bytes, actualiza `imagePath`). `delete()`/`deleteById()` eliminan también la imagen asociada.
+- Dependencias de test añadidas: `room-testing`, `kotlinx-coroutines-test`.
+- 27 tests instrumentados pasando:
+  - `VaultItemDaoTest` (15): CRUD, upsert, búsqueda en title/content/tags, búsqueda case-insensitive, filtro por categoría, soporte de imagePath, todos los ItemType.
+  - `CategoryDaoTest` (6): CRUD, ordenación por sortOrder+name, color nullable, sortOrder por defecto.
+  - `VaultDatabaseTest` (1): foreign key ON DELETE SET NULL (borrar categoría pone `categoryId = null` en items asociados).
+  - `FileStorageTest` (5): save/read, read inexistente, delete, imageExists, getImageFile.
 
-**Criterio de completado**: tests de DAO pasan. Se puede insertar, leer, buscar y eliminar items programáticamente.
+**Nota**: la capa de datos está completa pero todavía no es visible en la UI. A partir de la Fase 2 (captura rápida) se podrá verificar el almacenamiento de forma práctica.
 
 ---
 
