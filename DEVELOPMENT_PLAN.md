@@ -6,7 +6,7 @@
 |---|---|---|
 | 0 | Scaffolding del proyecto | Completada |
 | 1 | Modelo de datos y almacenamiento | Completada |
-| 2 | **Captura rápida + Quick Settings Tile** | Pendiente |
+| 2 | **Captura rápida + Quick Settings Tile** | Completada |
 | 3 | Pantalla principal (Home) | Pendiente |
 | 4 | Detalle y edición | Pendiente |
 | 5 | Share Target | Pendiente |
@@ -64,37 +64,24 @@
 
 ---
 
-## Fase 2 — Captura rápida + Quick Settings Tile
+## Fase 2 — Captura rápida + Quick Settings Tile (COMPLETADA)
 
 **Objetivo**: el flujo principal de la app funcionando de punta a punta. Bajar panel → tile → captura → guardar → cerrar.
 
-> Esta fase combina captura + integración con el sistema porque el Tile ES el punto de entrada principal, no un añadido posterior.
+**Resultado**:
+- `QuickCaptureActivity` implementada como actividad independiente con tema `Theme.QNotes.QuickCapture` (diálogo translúcido, 85% ancho mínimo). Configurada con `taskAffinity=".quickcapture"`, `launchMode="singleInstance"`, `excludeFromRecents="true"`.
+- `QuickCaptureContent` composable con tres sub-pantallas: menú (3 botones), nota rápida (`OutlinedTextField` + Save/Cancel), clipboard (preview + Save/Cancel).
+- `CaptureViewModel` (`@HiltViewModel`): gestiona estado de nota, clipboard y screenshot. Persiste via `ItemRepository.save()`.
+- `QuickSettingsTileService`: lanza `QuickCaptureActivity` con `FLAG_ACTIVITY_NEW_TASK`. API 34+: usa `PendingIntent` (overload con `Intent` deprecado). API <34: usa `Intent` directamente.
+- `ScreenshotService`: foreground service (`@AndroidEntryPoint`, extiende `Service`) para MediaProjection. Captura via `ImageReader` + `VirtualDisplay`, convierte a PNG, guarda via repositorio. Notificación de progreso y éxito. Usa `WindowMetrics` (API 30+).
+- 4 vector drawables creados: `ic_quick_capture`, `ic_screenshot`, `ic_note_quick`, `ic_clipboard`.
+- Manifest actualizado: permisos `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MEDIA_PROJECTION`, actividad, tile service y screenshot service.
+- Clipboard se lee al pulsar "From Clipboard" (no en `onCreate`) para garantizar que la actividad tiene foco — requisito de Android 10+.
 
-### 2a — QuickCaptureActivity (actividad independiente)
-
-- Crear `QuickCaptureActivity` como actividad separada con tema `Theme.Dialog` o transparente.
-- Configurar en Manifest con `taskAffinity` y `launchMode` para que se abra como tarea nueva y se cierre limpiamente.
-- Dentro, montar `QuickCaptureScreen` en Compose: tres botones grandes ("Captura de pantalla", "Nota rápida", "Desde portapapeles").
-- **Nota rápida**: campo de texto minimal + botón guardar. Al guardar, `CaptureViewModel` persiste via repositorio y la actividad se cierra (`finish()`).
-- **Desde portapapeles**: lee el clipboard, muestra preview del contenido, botón guardar. Misma lógica.
-- Sin selector de categoría en este paso (se asigna "Inbox" por defecto, categorizar es tarea de organización posterior).
-- Al guardar o cancelar (back), la actividad se cierra y el usuario vuelve a donde estaba.
-
-### 2b — Quick Settings Tile
-
-- Crear `QuickSettingsTileService` que extienda `TileService`.
-- Registrar en `AndroidManifest.xml` con intent filter.
-- `onClick()` lanza `QuickCaptureActivity` como nueva tarea.
-- Icono provisional (vector drawable simple).
-
-### 2c — Captura de pantalla (MediaProjection)
-
-- Implementar flujo de MediaProjection: la primera vez que el usuario pulsa "Captura de pantalla", se solicita permiso.
-- Una vez concedido, tomar screenshot, mostrar preview en `QuickCaptureScreen`, botón guardar.
-- Guardar la imagen via `FileStorage` + crear `VaultItem` de tipo `IMAGE`.
-- En Android 14+, MediaProjection requiere foreground service con tipo `mediaProjection`. Configurar en Manifest.
-
-**Criterio de completado**: se puede añadir el tile al panel, pulsarlo, tomar una nota rápida o screenshot, guardar y volver a la app anterior. Todo el flujo en ≤3 toques.
+**Notas técnicas**:
+- Hilt no soporta `LifecycleService` como `@AndroidEntryPoint`. `ScreenshotService` extiende `Service` directamente y usa `CoroutineScope` manual en lugar de `lifecycleScope`.
+- Hilt no soporta `TileService` como entry point. `QuickSettingsTileService` no usa inyección — solo lanza un Intent.
+- Lectura del clipboard protegida con `try/catch(SecurityException)` para Android 13+.
 
 ---
 
@@ -191,7 +178,6 @@
 ## Fases futuras (fuera de v1)
 
 - **Overlay flotante**: botón flotante accesible desde cualquier app (requiere `SYSTEM_ALERT_WINDOW`).
-- **Captura de pantalla integrada**: usar MediaProjection API para capturar screenshots directamente desde el tile.
 - **Exportación/backup**: exportar datos a JSON/ZIP para backup manual.
 - **Widget de escritorio**: widget de Android para captura rápida desde la pantalla de inicio.
 - **Markdown en notas**: soporte básico de formato markdown en el campo de texto.

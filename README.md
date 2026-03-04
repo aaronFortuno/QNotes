@@ -62,16 +62,21 @@ app/src/main/java/com/aaronfortuno/studio/qnotes/
 │       └── FileStorage.kt        # Almacenamiento de imágenes (filesDir/images/)
 ├── di/
 │   └── DatabaseModule.kt         # @Module Hilt — DB, DAOs
-├── service/                       # QuickSettingsTileService (Fase 2)
+├── service/
+│   ├── QuickSettingsTileService.kt  # Quick Settings tile — lanza QuickCaptureActivity
+│   └── ScreenshotService.kt        # Foreground service — MediaProjection capture
 ├── ui/
 │   ├── capture/
-│   │   └── CaptureScreen.kt      # Pantalla de captura rápida
+│   │   ├── CaptureScreen.kt        # Placeholder (NavGraph)
+│   │   ├── CaptureViewModel.kt     # @HiltViewModel — estado de captura
+│   │   ├── QuickCaptureActivity.kt  # Actividad diálogo flotante (independiente)
+│   │   └── QuickCaptureContent.kt   # Composable — UI del diálogo de captura
 │   ├── home/
-│   │   └── HomeScreen.kt         # Pantalla principal (lista)
+│   │   └── HomeScreen.kt         # Pantalla principal (lista) — placeholder
 │   ├── detail/
-│   │   └── DetailScreen.kt       # Detalle/edición de item
+│   │   └── DetailScreen.kt       # Detalle/edición de item — placeholder
 │   ├── settings/
-│   │   └── SettingsScreen.kt     # Configuración
+│   │   └── SettingsScreen.kt     # Configuración — placeholder
 │   ├── navigation/
 │   │   └── NavGraph.kt           # NavHost con rutas
 │   └── theme/                     # Theme Material 3
@@ -91,4 +96,4 @@ MIT
 
 ## Estado
 
-En desarrollo — Fase 1 (modelo de datos y almacenamiento) completada. 27 tests instrumentados pasando.
+En desarrollo — Fase 2 (captura rápida + Quick Settings Tile) completada. Quick Settings tile funcional con captura de notas, clipboard y screenshots via MediaProjection. 27 tests instrumentados pasando.

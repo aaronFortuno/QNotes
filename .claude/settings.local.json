@@ -7,7 +7,8 @@
       "WebFetch(domain:mvnrepository.com)",
       "Bash(adb devices:*)",
       "Bash(./gradlew connectedAndroidTest:*)",
-      "Bash(./gradlew connectedDebugAndroidTest:*)"
+      "Bash(./gradlew connectedDebugAndroidTest:*)",
+      "Bash(./gradlew testDebugUnitTest:*)"
     ]
   }
 }

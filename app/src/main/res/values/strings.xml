@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">QNotes</string>
+    <string name="tile_label">Quick Capture</string>
+    <string name="screenshot_notification_channel">Screenshots</string>
+    <string name="screenshot_capturing">Capturing screenshot…</string>
+    <string name="screenshot_saved">Screenshot saved</string>
 </resources>
