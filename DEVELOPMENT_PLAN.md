@@ -2,32 +2,40 @@
 
 ## Resumen de fases
 
-| Fase | Alcance | Resultado |
+| Fase | Alcance | Estado |
 |---|---|---|
-| 0 | Scaffolding del proyecto | Proyecto compilable con navegación básica |
-| 1 | Modelo de datos y almacenamiento | Room DB funcional, repositorio, guardado de items |
-| 2 | **Captura rápida + Quick Settings Tile** | **Flujo principal completo: tile → captura → guardar → cerrar** |
-| 3 | Pantalla principal (Home) | Lista de items, búsqueda y filtros |
-| 4 | Detalle y edición | Vista/edición completa de un item |
-| 5 | Share Target | Recibir contenido desde otras apps |
-| 6 | Internacionalización | i18n con selección manual de idioma |
-| 7 | Pulido y release | Tests, refinamiento UI, preparación para distribución |
+| 0 | Scaffolding del proyecto | Completada |
+| 1 | Modelo de datos y almacenamiento | Pendiente |
+| 2 | **Captura rápida + Quick Settings Tile** | Pendiente |
+| 3 | Pantalla principal (Home) | Pendiente |
+| 4 | Detalle y edición | Pendiente |
+| 5 | Share Target | Pendiente |
+| 6 | Internacionalización | Pendiente |
+| 7 | Pulido y release | Pendiente |
 
 ---
 
-## Fase 0 — Scaffolding del proyecto
+## Fase 0 — Scaffolding del proyecto (COMPLETADA)
 
 **Objetivo**: proyecto Android compilable con la estructura base lista.
 
-**Tareas**:
-- Crear proyecto con Android Studio (o Gradle desde CLI) con Kotlin, Compose, Material 3.
-- Configurar `build.gradle.kts` con dependencias: Compose BOM, Room, Hilt, Navigation Compose, Kotlin coroutines.
-- Crear la estructura de paquetes (`data/`, `di/`, `service/`, `ui/`, `util/`).
-- Configurar Hilt: `@HiltAndroidApp` en `Application`, módulos vacíos.
-- Crear `NavGraph` con rutas placeholder para Home, Capture, Detail, Settings.
-- Verificar que compila y se ejecuta (pantalla en blanco con navegación funcional).
+**Resultado**:
+- Proyecto configurado con AGP 9.1.0, Kotlin 2.2.10 (built-in en AGP 9), Compose BOM 2024.12.01, Material 3.
+- Dependencias configuradas en `gradle/libs.versions.toml`: Hilt 2.59.2, Room 2.8.4, Navigation Compose 2.8.5, KSP 2.2.10-2.0.2, Coroutines 1.9.0.
+- Estructura de paquetes creada: `data/`, `di/`, `service/`, `ui/`, `util/`.
+- Hilt configurado: `@HiltAndroidApp` en `QNotesApplication`, `@AndroidEntryPoint` en `MainActivity`, `DatabaseModule` con providers para Room DB, DAOs.
+- `NavGraph` con rutas funcionales: Home, Capture, Detail, Settings.
+- Entidades Room placeholder: `VaultItem`, `Category`, `ItemType`.
+- DAOs placeholder: `VaultItemDao`, `CategoryDao`.
+- `ItemRepository` con inyección Hilt.
+- `./gradlew assembleDebug` compila correctamente.
 
-**Criterio de completado**: `./gradlew assembleDebug` genera un APK instalable que muestra una pantalla vacía con navegación entre rutas.
+**Notas de compatibilidad AGP 9**:
+- El plugin `kotlin-android` NO se aplica — AGP 9 tiene Kotlin integrado.
+- `kotlinOptions` NO se usa — el JVM target se configura solo con `compileOptions`.
+- Hilt 2.59.2+ es obligatorio (versiones anteriores no soportan AGP 9).
+- Room 2.8.4+ es obligatorio (versiones anteriores fallan con KSP2: `unexpected jvm signature V`).
+- `android.disallowKotlinSourceSets=false` en `gradle.properties` es necesario para KSP2 con AGP 9.
 
 ---
 
@@ -36,12 +44,10 @@
 **Objetivo**: capa de datos funcional y testeada.
 
 **Tareas**:
-- Crear entidades Room: `VaultItem`, `Category`.
-- Crear `VaultItemDao` y `CategoryDao` con queries básicas (CRUD, búsqueda, filtro por categoría).
-- Crear `VaultDatabase` con configuración de Room.
+- Completar entidades Room: añadir campos faltantes a `VaultItem` (`imagePath`, `tags`), a `Category` (`color`, `sortOrder`).
+- Completar `VaultItemDao` y `CategoryDao` con queries de búsqueda, filtro por categoría y upsert.
 - Implementar `FileStorage` para guardar/leer/eliminar imágenes en almacenamiento interno.
-- Implementar `ItemRepository` que coordine DAO + FileStorage.
-- Crear módulo Hilt `DatabaseModule` para proveer DB, DAOs, FileStorage y Repository.
+- Completar `ItemRepository` para coordinar DAO + FileStorage.
 - Escribir tests instrumentados para el DAO (Room soporta testing con base de datos en memoria).
 
 **Criterio de completado**: tests de DAO pasan. Se puede insertar, leer, buscar y eliminar items programáticamente.

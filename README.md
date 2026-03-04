@@ -20,44 +20,68 @@ Guardar una idea o referencia interesante no debería requerir abrir una app, na
 
 ## Stack técnico
 
-| Componente | Tecnología |
-|---|---|
-| Lenguaje | Kotlin |
-| UI | Jetpack Compose + Material 3 |
-| Arquitectura | MVVM (ViewModel + Repository) |
-| Base de datos | Room |
-| Inyección de dependencias | Hilt |
-| Navegación | Navigation Compose |
-| Almacenamiento de imágenes | Ficheros internos de la app |
-| i18n | Android Resources con `AppCompatDelegate.setApplicationLocales()` |
+| Componente | Tecnología | Versión |
+|---|---|---|
+| Lenguaje | Kotlin (built-in AGP 9) | 2.2.10 |
+| UI | Jetpack Compose + Material 3 | BOM 2024.12.01 |
+| Build system | AGP | 9.1.0 |
+| Arquitectura | MVVM (ViewModel + Repository) | — |
+| Base de datos | Room | 2.8.4 |
+| Inyección de dependencias | Hilt (Dagger) | 2.59.2 |
+| Procesador de anotaciones | KSP 2 | 2.2.10-2.0.2 |
+| Navegación | Navigation Compose | 2.8.5 |
+| Coroutines | kotlinx-coroutines | 1.9.0 |
+| Almacenamiento de imágenes | Ficheros internos de la app | — |
+| i18n | Android Resources + `AppCompatDelegate` | — |
 
 ## Requisitos
 
 - Android 8.0+ (API 26)
-- Android Studio Ladybug o superior
+- Android Studio Meerkat (2025.1) o superior
 - JDK 17
+- Gradle 9.3.1+
 
 ## Estructura del proyecto
 
 ```
-app/src/main/
-├── java/com/qnotes/
-│   ├── data/           # Room DB, DAOs, entities, repository
-│   ├── di/             # Módulos Hilt
-│   ├── service/        # QuickSettingsTileService
-│   ├── ui/
-│   │   ├── capture/    # Pantalla de captura rápida
-│   │   ├── home/       # Pantalla principal (lista de items)
-│   │   ├── detail/     # Detalle/edición de un item
-│   │   ├── settings/   # Configuración (idioma, categorías)
-│   │   └── theme/      # Theme Material 3
-│   └── util/           # Extensiones, helpers i18n
-├── res/
-│   ├── values/           # strings.xml (inglés - fallback)
-│   ├── values-es/        # strings.xml (español)
-│   ├── values-ca/        # strings.xml (catalán)
-│   └── ...
-└── AndroidManifest.xml
+app/src/main/java/com/aaronfortuno/studio/qnotes/
+├── QNotesApplication.kt          # @HiltAndroidApp
+├── MainActivity.kt               # @AndroidEntryPoint + NavHost
+├── data/
+│   ├── local/
+│   │   ├── VaultDatabase.kt      # @Database (VaultItem, Category)
+│   │   ├── VaultItemDao.kt       # @Dao — CRUD para VaultItem
+│   │   └── CategoryDao.kt        # @Dao — CRUD para Category
+│   ├── model/
+│   │   ├── VaultItem.kt          # @Entity — item principal
+│   │   ├── Category.kt           # @Entity — categoría
+│   │   └── ItemType.kt           # enum: NOTE, PASSWORD, FILE
+│   ├── repository/
+│   │   └── ItemRepository.kt     # Repositorio con inyección Hilt
+│   └── storage/
+│       └── FileStorage.kt        # Almacenamiento de ficheros
+├── di/
+│   └── DatabaseModule.kt         # @Module Hilt — DB, DAOs
+├── service/                       # QuickSettingsTileService (Fase 2)
+├── ui/
+│   ├── capture/
+│   │   └── CaptureScreen.kt      # Pantalla de captura rápida
+│   ├── home/
+│   │   └── HomeScreen.kt         # Pantalla principal (lista)
+│   ├── detail/
+│   │   └── DetailScreen.kt       # Detalle/edición de item
+│   ├── settings/
+│   │   └── SettingsScreen.kt     # Configuración
+│   ├── navigation/
+│   │   └── NavGraph.kt           # NavHost con rutas
+│   └── theme/                     # Theme Material 3
+└── util/                          # Extensiones, helpers (Fase 6+)
+```
+
+## Compilar
+
+```bash
+./gradlew assembleDebug
 ```
 
 ## Licencia
@@ -66,4 +90,4 @@ MIT
 
 ## Estado
 
-🚧 En desarrollo
+En desarrollo — Fase 0 (scaffolding) completada.

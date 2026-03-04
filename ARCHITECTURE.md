@@ -4,6 +4,33 @@
 
 QNotes sigue una arquitectura MVVM (Model-View-ViewModel) con una capa de repositorio que abstrae el acceso a datos. La inyección de dependencias se gestiona con Hilt. La UI se construye íntegramente con Jetpack Compose y Material 3.
 
+**Paquete base**: `com.aaronfortuno.studio.qnotes`
+
+### Stack actual
+
+| Componente | Versión |
+|---|---|
+| AGP | 9.1.0 |
+| Kotlin | 2.2.10 (built-in AGP 9) |
+| Compose BOM | 2024.12.01 |
+| Hilt | 2.59.2 |
+| Room | 2.8.4 |
+| KSP 2 | 2.2.10-2.0.2 |
+| Navigation Compose | 2.8.5 |
+| Coroutines | 1.9.0 |
+| minSdk | 26 |
+| targetSdk | 36 |
+| Java | 17 |
+
+### Notas AGP 9
+
+AGP 9.1.0 incluye Kotlin de forma nativa. Esto implica:
+- No se aplica el plugin `kotlin-android` — ya está integrado en AGP.
+- No existe `kotlinOptions` — el JVM target se configura solo con `compileOptions`.
+- `android.disallowKotlinSourceSets=false` es necesario en `gradle.properties` para compatibilidad con KSP2.
+- Hilt 2.59.2+ es obligatorio (versiones anteriores no encuentran `BaseExtension`).
+- Room 2.8.4+ es obligatorio (versiones anteriores fallan con KSP2).
+
 ### Principio de diseño fundamental
 
 **El uso principal de QNotes ocurre fuera de la app.** El usuario baja el panel de ajustes rápidos, pulsa el tile, captura el contenido y vuelve a lo que estaba haciendo. Todo el flujo debe completarse en 1-2 toques y menos de 3 segundos. La app interna (lista de items, edición, categorías) es una herramienta secundaria de organización para usar cuando convenga, no el punto de entrada habitual.
@@ -77,6 +104,21 @@ Abre la pantalla principal (`HomeScreen`) con la lista de todos los items guarda
 
 ### 2. Capa de UI (Jetpack Compose)
 
+#### Navegación
+
+Definida en `NavGraph.kt` con una sealed class `Screen`:
+
+```kotlin
+sealed class Screen(val route: String) {
+    data object Home : Screen("home")
+    data object Capture : Screen("capture")
+    data object Detail : Screen("detail/{itemId}")
+    data object Settings : Screen("settings")
+}
+```
+
+`NavHost` configurado en `MainActivity` con `Scaffold` y soporte para edge-to-edge.
+
 #### Pantallas
 
 | Pantalla | Prioridad | Función | Acceso |
@@ -104,88 +146,137 @@ Cada pantalla tiene su ViewModel asociado, inyectado por Hilt:
 
 ### 4. Capa de datos
 
-#### Entidades Room
+#### Entidades Room (estado actual)
 
 ```kotlin
-@Entity(tableName = "items")
+@Entity(tableName = "vault_items")
 data class VaultItem(
-    @PrimaryKey val id: String = UUID.randomUUID().toString(),
-    val type: ItemType,          // NOTE, IMAGE, LINK, CLIPBOARD
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
-    val textContent: String?,
-    val imagePath: String?,      // ruta relativa en almacenamiento interno
-    val category: String = "general",
-    val tags: String = "",       // separados por coma, búsqueda con LIKE
+    val content: String,
+    val type: ItemType,
+    val categoryId: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
 
-enum class ItemType { NOTE, IMAGE, LINK, CLIPBOARD }
+enum class ItemType { NOTE, PASSWORD, FILE }
 ```
 
 ```kotlin
 @Entity(tableName = "categories")
 data class Category(
-    @PrimaryKey val name: String,
-    val color: Int?,             // color en formato ARGB
-    val sortOrder: Int = 0
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String
 )
 ```
 
-#### DAO
+> Nota: en fases posteriores se añadirán campos como `imagePath`, `tags`, `color` y `sortOrder`.
+
+#### DAOs (estado actual)
 
 ```kotlin
 @Dao
 interface VaultItemDao {
-    @Query("SELECT * FROM items ORDER BY createdAt DESC")
-    fun getAllItems(): Flow<List<VaultItem>>
+    @Query("SELECT * FROM vault_items ORDER BY updatedAt DESC")
+    fun getAll(): Flow<List<VaultItem>>
 
-    @Query("SELECT * FROM items WHERE category = :category ORDER BY createdAt DESC")
-    fun getByCategory(category: String): Flow<List<VaultItem>>
+    @Query("SELECT * FROM vault_items WHERE id = :id")
+    suspend fun getById(id: Long): VaultItem?
 
-    @Query("SELECT * FROM items WHERE title LIKE '%' || :query || '%' OR textContent LIKE '%' || :query || '%'")
-    fun search(query: String): Flow<List<VaultItem>>
+    @Insert
+    suspend fun insert(item: VaultItem): Long
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(item: VaultItem)
+    @Update
+    suspend fun update(item: VaultItem)
 
     @Delete
     suspend fun delete(item: VaultItem)
 }
 ```
 
-#### Repositorio
+```kotlin
+@Dao
+interface CategoryDao {
+    @Query("SELECT * FROM categories ORDER BY name ASC")
+    fun getAll(): Flow<List<Category>>
 
-`ItemRepository` actúa como fuente única de verdad. Coordina las operaciones entre Room (metadatos) y el sistema de ficheros (imágenes). Expone `Flow` para observación reactiva desde los ViewModels.
+    @Insert
+    suspend fun insert(category: Category): Long
+
+    @Delete
+    suspend fun delete(category: Category)
+}
+```
+
+> Nota: en la Fase 1 se añadirán queries de búsqueda, filtro por categoría y upsert.
+
+#### Base de datos
 
 ```kotlin
-class ItemRepository @Inject constructor(
-    private val dao: VaultItemDao,
-    private val fileStorage: FileStorage
-) {
-    fun getAllItems(): Flow<List<VaultItem>> = dao.getAllItems()
+@Database(
+    entities = [VaultItem::class, Category::class],
+    version = 1,
+    exportSchema = false
+)
+abstract class VaultDatabase : RoomDatabase() {
+    abstract fun vaultItemDao(): VaultItemDao
+    abstract fun categoryDao(): CategoryDao
+}
+```
 
-    suspend fun saveItem(item: VaultItem, imageBytes: ByteArray? = null): VaultItem {
-        val finalItem = if (imageBytes != null) {
-            val path = fileStorage.saveImage(item.id, imageBytes)
-            item.copy(imagePath = path)
-        } else item
-        dao.upsert(finalItem)
-        return finalItem
+#### Repositorio (estado actual)
+
+`ItemRepository` actúa como fuente única de verdad. Expone `Flow` para observación reactiva desde los ViewModels.
+
+```kotlin
+@Singleton
+class ItemRepository @Inject constructor(
+    private val vaultItemDao: VaultItemDao
+) {
+    fun getAll(): Flow<List<VaultItem>> = vaultItemDao.getAll()
+    suspend fun getById(id: Long): VaultItem? = vaultItemDao.getById(id)
+    suspend fun insert(item: VaultItem): Long = vaultItemDao.insert(item)
+    suspend fun update(item: VaultItem) = vaultItemDao.update(item)
+    suspend fun delete(item: VaultItem) = vaultItemDao.delete(item)
+}
+```
+
+> Nota: en la Fase 1 se integrará `FileStorage` para coordinar DAO + almacenamiento de imágenes.
+
+#### Almacenamiento de imágenes (`FileStorage`)
+
+Las imágenes se guardan en el directorio interno de la app (`context.filesDir/images/`). Esto evita necesitar permisos de almacenamiento externo y garantiza que los archivos se eliminan si se desinstala la app. Actualmente es un placeholder; se implementará en la Fase 1.
+
+### 5. Inyección de dependencias (Hilt)
+
+```kotlin
+@Module
+@InstallIn(SingletonComponent::class)
+object DatabaseModule {
+    @Provides
+    @Singleton
+    fun provideDatabase(@ApplicationContext context: Context): VaultDatabase {
+        return Room.databaseBuilder(
+            context,
+            VaultDatabase::class.java,
+            "vault_database"
+        ).build()
     }
 
-    suspend fun deleteItem(item: VaultItem) {
-        item.imagePath?.let { fileStorage.deleteImage(it) }
-        dao.delete(item)
+    @Provides
+    fun provideVaultItemDao(database: VaultDatabase): VaultItemDao {
+        return database.vaultItemDao()
+    }
+
+    @Provides
+    fun provideCategoryDao(database: VaultDatabase): CategoryDao {
+        return database.categoryDao()
     }
 }
 ```
 
-#### Almacenamiento de imágenes (`FileStorage`)
-
-Las imágenes se guardan en el directorio interno de la app (`context.filesDir/images/`). Esto evita necesitar permisos de almacenamiento externo y garantiza que los archivos se eliminan si se desinstala la app.
-
-### 5. Internacionalización (i18n)
+### 6. Internacionalización (i18n)
 
 #### Problema a resolver
 
@@ -203,14 +294,8 @@ QNotes implementa selección de idioma a nivel de app usando la API `AppCompatDe
 
 ```kotlin
 object LocaleHelper {
-    // Mapa de idiomas disponibles
-    val availableLocales = listOf(
-        "en",  // English (fallback base)
-        "es",  // Español
-        "ca",  // Català
-    )
+    val availableLocales = listOf("en", "es", "ca")
 
-    // Fallback chains: si un idioma no está disponible, probar estos en orden
     private val fallbackChains = mapOf(
         "ca" to listOf("es", "en"),
         "gl" to listOf("es", "en"),
@@ -237,25 +322,6 @@ res/values-ca/strings.xml       → catalán
 
 Todos los strings visibles al usuario deben estar en `strings.xml`. No se permiten strings hardcodeados en el código.
 
-### 6. Inyección de dependencias (Hilt)
-
-```kotlin
-@Module
-@InstallIn(SingletonComponent::class)
-object DatabaseModule {
-    @Provides @Singleton
-    fun provideDatabase(@ApplicationContext context: Context): VaultDatabase =
-        Room.databaseBuilder(context, VaultDatabase::class.java, "qnotes.db").build()
-
-    @Provides
-    fun provideItemDao(db: VaultDatabase): VaultItemDao = db.itemDao()
-
-    @Provides @Singleton
-    fun provideFileStorage(@ApplicationContext context: Context): FileStorage =
-        FileStorage(context)
-}
-```
-
 ### 7. Permisos
 
 | Permiso | Uso | Obligatorio |
@@ -279,6 +345,10 @@ Room proporciona verificación en tiempo de compilación de queries SQL, integra
 ### ¿Por qué Hilt y no Koin?
 
 Hilt genera código en compilación (menos errores en runtime), es el estándar recomendado por Google para proyectos Android con Compose, y la integración con ViewModels es directa con `@HiltViewModel`.
+
+### ¿Por qué KSP2 y no KAPT?
+
+KAPT está deprecado. KSP2 es el procesador de anotaciones recomendado y es obligatorio con AGP 9 + Kotlin built-in. La versión 2.2.10-2.0.2 es compatible con Kotlin 2.2.10.
 
 ### ¿Por qué tags como String separado por comas?
 
